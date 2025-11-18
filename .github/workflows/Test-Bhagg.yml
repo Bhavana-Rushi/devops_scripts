@@ -1,0 +1,48 @@
+
+name: Checkout Repositories TEST
+
+on:
+  workflow_dispatch:
+
+env:
+  GITHUB_PAT: ${{ secrets.CHC_GITHUB_PAT }}
+  WORKSPACE: ${{ github.workspace }}/${{ github.run_number }}
+  REPONAME: ${{ github.event.repository.name }}
+
+jobs:
+  Checkout:
+    environment: prod
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: add repo to safe directory
+        run: |
+          git config --global --add safe.directory /__w/${REPONAME}/${REPONAME}
+          git config --global --add safe.directory ${{ env.WORKSPACE }}/${REPONAME}/${REPONAME}
+      - name: create wokspace
+        run: |
+          mkdir -p ${{ env.WORKSPACE }}
+
+      - name: Checkout Devops scripts
+        uses: actions/checkout@v2.3.4
+        with:
+          repository: Sanofi-GitHub/chc-devops-scripts
+          ref: main
+          path: ${{ env.WORKSPACE }}/chc_scripts
+          token: ${{ env.GITHUB_PAT }}
+      - name: check DevOps checkout
+        run: |
+          ls -lrt ${{ env.WORKSPACE }}/chc_scripts
+
+      - name: Checkout sharedmodule properties for Cognizant   
+        uses: actions/checkout@v2.3.4
+        with:
+          repository: Sanofi-GitHub/TCI-sharedmodule-config
+          ref: main
+          path: ${{ env.WORKSPACE }}/shared_module
+          token: ${{ env.GITHUB_PAT }}
+      - name: check DevOps checkout
+        run: |
+          ls -lrt ${{ env.WORKSPACE }}/shared_module
