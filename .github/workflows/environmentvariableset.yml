@@ -1,0 +1,92 @@
+
+name: Update Properties
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+    secrets:
+      CHC_GITHUB_PAT:
+        required: true
+      JFROG_USERNAME:
+        required: true
+      DOCKER_REGISTRY:
+        required: true
+      DOCKER_TOKEN:
+        required: true
+env:
+  REPONAME: ${{ github.event.repository.name }}
+jobs:
+  update-properties:
+    runs-on: ['atmos-aws-arc-runner-set']
+    container:
+      image: docker-chc-tibco-remote.artifactorydev.p230559371484.aws-emea.sanofi.com/build-images/sanofi-chc-build-base:v1.0.0
+      credentials:
+        username: ${{ secrets.JFROG_USERNAME }}
+        password: ${{ secrets.DOCKER_TOKEN }}
+    steps:
+  #    - name: add repo to safe directory
+  #      run: |
+  #        git config --global --add safe.directory /__w/${REPONAME}/${REPONAME}
+         
+  #    - name: Checkout
+  #      uses: actions/checkout@v2.3.4
+
+      - name: Set environment secrets
+        run: |
+          check_and_set_secret() {
+            local secret_name=$1
+            local secret_value=$2
+            if [ -z "$secret_value" ]; then
+              echo "Warning: Secret $secret_name is not set."
+            else
+              echo setting environment properties
+              echo "$secret_name=$secret_value" >> $GITHUB_ENV
+            fi
+          }
+
+          get_secret() {
+            local secret_name=$1
+            local secret_value=${{ secrets[secret_name] }}
+            if [ -z "$secret_value" ]; then
+              secret_value=$(gh secret list --repo ${{ github.event.repository.name }} | grep $secret_name | awk '{print $2}')
+            fi
+            echo $secret_value
+          }
+
+          if [ "${{ github.event.inputs.environment }}" = "dev" ]; then
+            echo "Setting properties for DEV"
+            check_and_set_secret "CHC_HTTP_PROXY" "$(get_secret CHC_HTTP_PROXY)"
+            check_and_set_secret "CHC_HTTPS_PROXY" "$(get_secret CHC_HTTPS_PROXY)"
+            check_and_set_secret "CHC_GITHUB_PAT" "$(get_secret CHC_GITHUB_PAT)"
+            check_and_set_secret "JFROG_USERNAME" "$(get_secret JFROG_USERNAME)"
+            check_and_set_secret "JFROG_TOKEN" "$(get_secret JFROG_TOKEN)"
+            check_and_set_secret "DOCKER_REGISTRY" "$(get_secret DOCKER_REGISTRY)"
+            check_and_set_secret "TCI_CLIENT_ID" "$(get_secret TCI_CLIENT_ID)"
+            check_and_set_secret "TCI_CLIENT_SECRET" "$(get_secret TCI_CLIENT_SECRET)"
+            check_and_set_secret "DOCKER_TOKEN" "$(get_secret DOCKER_TOKEN)"
+          elif [ "${{ github.event.inputs.environment }}" = "sit" ]; then
+            echo "Setting properties for SIT"
+            check_and_set_secret "CHC_HTTP_PROXY" "$(get_secret SIT_CHC_HTTP_PROXY)"
+            check_and_set_secret "CHC_HTTPS_PROXY" "$(get_secret SIT_CHC_HTTPS_PROXY)"
+            check_and_set_secret "CHC_GITHUB_PAT" "$(get_secret SIT_CHC_GITHUB_PAT)"
+            check_and_set_secret "JFROG_USERNAME" "$(get_secret SIT_JFROG_USERNAME)"
+            check_and_set_secret "JFROG_TOKEN" "$(get_secret SIT_JFROG_TOKEN)"
+            check_and_set_secret "DOCKER_REGISTRY" "$(get_secret SIT_DOCKER_REGISTRY)"
+            check_and_set_secret "TCI_CLIENT_ID" "$(get_secret SIT_TCI_CLIENT_ID)"
+            check_and_set_secret "TCI_CLIENT_SECRET" "$(get_secret SIT_TCI_CLIENT_SECRET)"
+            check_and_set_secret "DOCKER_TOKEN" "$(get_secret SIT_DOCKER_TOKEN)"
+          elif [ "${{ github.event.inputs.environment }}" = "prod" ]; then
+            echo "Setting properties for PROD"
+            check_and_set_secret "CHC_HTTP_PROXY" "$(get_secret PROD_CHC_HTTP_PROXY)"
+            check_and_set_secret "CHC_HTTPS_PROXY" "$(get_secret PROD_CHC_HTTPS_PROXY)"
+            check_and_set_secret "CHC_GITHUB_PAT" "$(get_secret PROD_CHC_GITHUB_PAT)"
+            check_and_set_secret "JFROG_USERNAME" "$(get_secret PROD_JFROG_USERNAME)"
+            check_and_set_secret "JFROG_TOKEN" "$(get_secret PROD_JFROG_TOKEN)"
+            check_and_set_secret "DOCKER_REGISTRY" "$(get_secret PROD_DOCKER_REGISTRY)"
+            check_and_set_secret "TCI_CLIENT_ID" "$(get_secret PROD_TCI_CLIENT_ID)"
+            check_and_set_secret "TCI_CLIENT_SECRET" "$(get_secret PROD_TCI_CLIENT_SECRET)"
+            check_and_set_secret "DOCKER_TOKEN" "$(get_secret PROD_DOCKER_TOKEN)"
+          fi
