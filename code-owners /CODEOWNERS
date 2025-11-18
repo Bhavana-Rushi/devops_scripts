@@ -1,0 +1,11 @@
+
+# This is a comment.
+# Each line is a file pattern followed by one or more owners.
+# These owners will be the default owners for everything in
+# the repo. Unless a later match takes precedence,
+# they will be requested for
+# review when someone opens a pull request.
+*        @Sanofi-GitHub/chc-admins @Sanofi-GitHub/opella-tci-codeowners @Sanofi-GitHub/opella-tci-aims-support @Sanofi-GitHub/opella-tci-ams-support @Sanofi-GitHub/CHC-Accenture-developers
+
+
+
