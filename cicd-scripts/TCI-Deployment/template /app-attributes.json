@@ -1,0 +1,8 @@
+
+{
+    "deploymentStage": "${APP_CONF_DEPLOYMENTSTAGE}",
+    "description": "${APP_CONF_DESCRIPTION}",
+    "endpointVisibility": "${APP_CONF_ENDPOINTVISIBILITY}",
+    "tags": [${APP_CONF_TAGS}]
+}
+  
