@@ -1,0 +1,53 @@
+
+name: EAR download
+
+on:
+  push:
+    branches:
+       - xyz
+      
+env:
+  WORKSPACE: ${{ github.workspace }}
+  JFROG_USERNAME: ${{ secrets.JFROG_USERNAME }}
+  JFROG_TOKEN: ${{ secrets.JFROG_TOKEN }}
+  DOCKER_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
+  HTTP_PROXY: ${{ secrets.CHC_HTTP_PROXY }}
+  HTTPS_PROXY: ${{ secrets.CHC_HTTPS_PROXY }}
+  GITHUB_PAT: ${{ secrets.CHC_GITHUB_PAT }}
+
+jobs:
+  Download-EAR:
+    runs-on: ['atmos-aws-arc-runner-set']
+    container:
+      image: sanofi-docker-chc-tibco-local.jfrog.io/build-images/sanofi-chc-build-base:v1.0.0
+      credentials:
+        username: ${{ env.JFROG_USERNAME }}
+        password: ${{ env.JFROG_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2.3.4
+        with:
+          fetch-depth: 0
+          submodules: 'true'
+          ref: branch-creation-scripts
+          token: ${{ env.GITHUB_PAT }}
+
+      - name: Download artifact
+        run: |
+          cd ${WORKSPACE}
+          git switch ear-download
+          curl -H "X-JFrog-Art-Api:${{ env.JFROG_TOKEN }}" -O "https://sanofi.jfrog.io/artifactory/maven-chc-maven-local/bw.mc-Polaris-Material-SCP/Development/Dev-4/bw.mc-Polaris-Material-SCP.application_1.0.0.ear"
+          curl -H "X-JFrog-Art-Api:${{ env.JFROG_TOKEN }}" -O "https://sanofi.jfrog.io/artifactory/maven-chc-maven-local/bw.mc-Polaris-Material-SCP/Development/Dev-4/dev.properties"
+
+      - name: Commit to GitHub
+        run: |
+          cd ${WORKSPACE}
+          ls -l
+          git config --global user.name "MamathaCHC"
+          git config --global user.email "mamatha.t@sanofi.com"
+          git status
+          git add -f bw.mc-Polaris-Material-SCP.application_1.0.0.ear
+          git add -f dev.properties
+          git commit -m "checking in artifact to github"
+          git push origin ear-download
+
