@@ -1,0 +1,32 @@
+
+name: Docker Image Creation
+
+on:
+  push:
+    paths:
+      - 'build-images/v1.0.0/sanofi-chc-build-base/Dockerfile'
+      
+env:
+  WORKSPACE: ${{ github.workspace }}
+  JFROG_USERNAME: ${{ secrets.JFROG_USERNAME }}
+  JFROG_TOKEN: ${{ secrets.JFROG_TOKEN }}
+  DOCKER_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
+
+jobs:
+  Docker-Image-Creation:
+    runs-on: ['atmos-aws-arc-runner-set']
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout 
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+          submodules: 'true'
+          ref: main
+
+      - name: Docker Image Creation and Upload
+        run: |
+          cd ${WORKSPACE}/build-images/v1.0.0/sanofi-chc-build-base/
+          bash ${WORKSPACE}/cicd-scripts/docker-image-upload.sh sanofi-chc-build-base v1.0.0
