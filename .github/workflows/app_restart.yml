@@ -1,0 +1,160 @@
+
+name: Restart Application
+
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: dev/sit/uat/prod
+        required: true
+      application_name:
+        description: Application name
+        required: true      
+      instance_count:
+        description: Instance Count
+        required: false
+        default: 0
+      command:
+        description: start/stop/restart/scale
+        required: true
+
+    #inputs:
+    #  branch_name: 
+    #    description: 'name of the branch'
+    #    required: true
+#on:
+#  workflow_dispatch:
+    #branches:
+    #  - PRODUCTION
+
+#on:
+#  workflow_dispatch:
+#    inputs:
+#      environment:
+#        description: dev/sit/uat/prod
+#        required: true
+#      application_name:
+#        description: Application name
+#        required: true      
+#      instance_count:
+#        description: Instance Count
+#        required: false
+#        default: 0
+#      command:
+#        description: start/stop/restart
+#        required: true
+
+#on:
+#  workflow_dispatch:
+  #  inputs:
+  #    environment: 
+  #      description: 'name of the environment'
+  #      required: true
+     
+env:
+  HTTP_PROXY: ${{ secrets.CHC_HTTP_PROXY }}
+  HTTPS_PROXY: ${{ secrets.CHC_HTTPS_PROXY }}
+  GITHUB_PAT: ${{ secrets.CHC_GITHUB_PAT }}
+  JFROG_USERNAME:  ${{ secrets.JFROG_USERNAME }}
+  JFROG_TOKEN: ${{ secrets.JFROG_TOKEN }}
+  DOCKER_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
+  DEV_TCI_CLIENTID_CICD: ${{ secrets.DEV_TCI_CLIENT_ID }}
+  DEV_TCI_CLIENTSECRET_CICD: ${{ secrets.DEV_TCI_CLIENT_SECRET }}
+  SIT_TCI_CLIENTID_CICD: ${{ secrets.SIT_TCI_CLIENT_ID }}
+  SIT_TCI_CLIENTSECRET_CICD: ${{ secrets.SIT_TCI_CLIENT_SECRET }}
+  UAT_TCI_CLIENTID_CICD: ${{ secrets.UAT_TCI_CLIENT_ID }}
+  UAT_TCI_CLIENTSECRET_CICD: ${{ secrets.UAT_TCI_CLIENT_SECRET }}
+  BUILD_ID: ${{ github.run_number }}
+  WORKSPACE: ${{ github.workspace }}
+  CIC_TCI_CLIENTID_CICD: ${{ secrets.DEV_TCI_CLIENT_ID }}
+  CIC_TCI_CLIENTSECRET_CICD: ${{ secrets.DEV_TCI_CLIENT_SECRET }}
+  #BRANCH_NAME: ${{ github.event.inputs.branch_name }}
+  REPONAME: ${{ github.event.repository.name }}
+  #INTERFACE_NAME: ${{ inputs.INTERFACE_NAME }}
+  #APP_CONF_INSTANCECOUNT: ${{ github.event.inputs.instance_count }}
+  #VENDOR_NAME: ${{ github.event.inputs.vendor_name }}
+  #NO_PROXY: 'cloud.local,sanofi.com,docker'
+
+jobs:
+  Restart_Applications:
+    runs-on: ['atmos-aws-arc-runner-set']
+    container:
+      image: sanofi-docker-chc-tibco-local.jfrog.io/build-images/sanofi-chc-build-base:v1.0.0
+      credentials:
+        username: ${{ env.JFROG_USERNAME }}
+        password: ${{ env.JFROG_TOKEN }}
+    steps:
+      - name: add repo to safe directory
+        run: |
+          git config --global --add safe.directory /__w/${REPONAME}/${REPONAME}
+          
+      - name: Checkout
+        uses: actions/checkout@v2.3.4
+        with:
+          fetch-depth: 0
+          submodules: 'true'
+          ref: ${{ env.BRANCH_NAME }}
+          token: ${{ env.GITHUB_PAT }}
+
+      - name: CHeckout Devops scripts
+        uses: actions/checkout@v2.3.4
+        with:
+          repository: Sanofi-GitHub/chc-devops-scripts
+          ref: main
+          path: chc_scripts
+          token: ${{ env.GITHUB_PAT }}
+      - name: Determine action
+        id: determine_action
+        run: echo "::set-output name=command::$(echo ${{ github.event.inputs.command }} | tr '[:upper:]' '[:lower:]')"
+
+   #   - name: Determine secrets
+   #     id: determine_secrets
+   #     run: |
+   #       case ${{ github.event.inputs.environment }} in
+   #         dev)
+   #           echo "::set-output name=CIC_TCI_CLIENTID_CICD::${{ secrets.DEV_TCI_CLIENT_ID }}"
+   #           echo "::set-output name=CIC_TCI_CLIENTSECRET_CICD::${{ secrets.DEV_TCI_CLIENT_SECRET }}"
+   #           ;;
+   #         sit)
+   #           echo "::set-output name=CIC_TCI_CLIENTID_CICD::${{ secrets.SIT_TCI_CLIENT_ID }}"
+   #           echo "::set-output name=CIC_TCI_CLIENTSECRET_CICD::${{ secrets.SIT_TCI_CLIENT_SECRET }}"
+   #           ;;
+   #         uat)
+   #           echo "::set-output name=CIC_TCI_CLIENTID_CICD::${{ secrets.UAT_TCI_CLIENT_ID }}"
+   #           echo "::set-output name=CIC_TCI_CLIENTSECRET_CICD::${{ secrets.UAT_TCI_CLIENT_SECRET }}"
+   #           ;;
+   #         *)
+   #           echo "Invalid environment provided: ${{ inputs.environment }}"
+   #           exit 1
+   #           ;;
+   #       esac
+
+      - name: Execute action
+        run: |
+          cd $WORKSPACE
+          export DEPLOYMENT_SCRIPT=${WORKSPACE}/chc_scripts/cicd-scripts/TCI-Deployment/bin/tci
+          echo ${{ github.event.inputs.application_name }}
+          ls ${DEPLOYMENT_SCRIPT}
+          action=$(echo "${{ steps.determine_action.outputs.command }}")
+          case $action in
+            start)
+             #bash ${DEPLOYMENT_SCRIPT}/chc-app-manage2.sh scale ${{ github.event.inputs.application_name }} ${{ github.event.inputs.instance_count }}
+              bash ${DEPLOYMENT_SCRIPT}/chc-app-manage2.sh start ${{ github.event.inputs.application_name }}
+              ;;
+            stop)
+              bash ${DEPLOYMENT_SCRIPT}/chc-app-manage2.sh stop ${{ github.event.inputs.application_name }}
+              ;;
+            restart)
+              bash ${DEPLOYMENT_SCRIPT}/chc-app-manage2.sh stop ${{ github.event.inputs.application_name }}
+              sleep 180
+              bash ${DEPLOYMENT_SCRIPT}/chc-app-manage2.sh start ${{ github.event.inputs.application_name }}
+              ;;
+            scale)
+              bash ${DEPLOYMENT_SCRIPT}/chc-app-manage2.sh scale ${{ github.event.inputs.application_name }} ${{ github.event.inputs.instance_count }}
+              ;;
+            *)
+              echo "Invalid action provided: $action"
+              exit 1
+              ;;
+          esac
