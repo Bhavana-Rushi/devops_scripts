@@ -1,0 +1,63 @@
+
+name: 'Artifact'
+
+on:
+  workflow_dispatch:
+    inputs:
+      Interface_name:
+        description: 'Interface_name(starts with bw ex:bw.mc-S4-STKPC)'
+        required: false
+      Repo_name:
+        description: 'Repo_name(ex:Sanofi-GitHub/CHC-polaris-s4hana-stkpc)'
+        required: false
+        default: Sanofi-GitHub/CHC-polaris-s4hana-stkpc  
+  # push:
+  #    branches:
+  #     - log-artifact
+
+env:
+  WORKSPACE: ${{ github.workspace }}
+  JFROG_USERNAME: ${{ secrets.JFROG_USERNAME }}
+  JFROG_TOKEN: ${{ secrets.JFROG_TOKEN }}
+  DOCKER_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
+  REPONAME: ${{ inputs.Repo_name }}
+  INTERFACE_NAME: ${{ inputs.Interface_name }}
+  
+jobs:
+    Job: 
+         runs-on: ['atmos-aws-arc-runner-set']
+         steps:
+          - name: Checkout
+            uses: actions/checkout@v2.3.4
+          - run: |
+             mkdir -p ${{ github.workspace }}/artifact
+          -  name: Log
+             id: get-id
+             env:
+               GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+               name: Interface
+             run: |              
+              # list=$(gh run list -R ${{ github.repository }} -L 5 -w log-archive.yml -s success --json databaseId,conclusion,createdAt --jq '.[] | (.databaseId|tostring) + " " + .createdAt| @json')
+              echo $REPONAME
+              #list=$(gh run list -R ${REPONAME} -L 5 -s completed --json databaseId,conclusion,createdAt --jq '.[] | (.databaseId|tostring) + " " + .createdAt| @json')
+          #     eval "arr=($list)"
+          #       for s in "${arr[@]}"; do 
+          #              id=$(echo $s | cut -f1 -d' ') 
+          #              date=$(echo $s | cut -f2 -d' ' |sed 's/:/_/g')
+          #              reponame=$(basename $REPONAME)
+          #          gh run view "$id" --log > ${{ github.workspace }}/artifact/$reponame-"$date"-log.txt
+          #          grep -i "deployment" ${{ github.workspace }}/artifact/$reponame-"$date"-log.txt | awk '{print $0," "}' > ${{ github.workspace }}/artifact/$reponame-"$date"-log.html
+          #          echo ${{ github.workspace }}/artifact/$reponame-"$date"-log.html
+          #          echo "filename=${{ github.workspace }}/artifact/$reponame-"$date"-log.html" >> $GITHUB_OUTPUT
+          #       done
+
+          # - uses: actions/upload-artifact@v2 # Uplaod screenshots to Actions Artifacts via actions/upload-artifact@v2
+          #   with:
+          #     path: ${{ github.workspace }}/artifact/*.txt
+          #     name: log
+          
+          # - name: Download a single artifact
+          #   uses: actions/download-artifact@v3
+          #   with:
+          #    name: log
+          #    path: ${{ github.workspace }}/
