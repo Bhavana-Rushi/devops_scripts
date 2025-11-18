@@ -1,0 +1,78 @@
+
+name: Add Workflows
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch_name: 
+        description: 'name of the branch'
+        required: true
+
+  # push:
+  #   branches:
+  #     - instancecount
+    
+env:      
+  #HTTP_PROXY: ${{ secrets.CHC_HTTP_PROXY }}
+  #HTTPS_PROXY: ${{ secrets.CHC_HTTPS_PROXY }}
+  GITHUB_PAT: ${{ secrets.CHC_GITHUB_PAT }}
+  JFROG_USERNAME:  ${{ secrets.JFROG_USERNAME }}
+  JFROG_TOKEN: ${{ secrets.JFROG_TOKEN }}
+  DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
+  DOCKER_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
+  WORKSPACE: ${{ github.workspace }}
+  GIT_USERNAME:  ${{ secrets.CHC_GIT_CONFIG_NAME }}
+  GIT_EMAIL: ${{ secrets.CHC_GIT_CONFIG_EMAIL }}
+  BRANCH_NAME: ${{github.event.inputs.branch_name}}
+  REPONAME: ${{ github.event.repository.name }}
+  ORGANIZATION: Sanofi-GitHub
+
+jobs:
+  Add-Workflows:
+    runs-on: ['atmos-aws-arc-runner-set']
+    container:
+      image: docker-chc-tibco-remote.artifactorydev.p230559371484.aws-emea.sanofi.com/build-images/sanofi-chc-build-base:v1.0.0
+      credentials:
+        username: ${{ env.JFROG_USERNAME }}
+        password: ${{ env.DOCKER_TOKEN}}
+      env:
+        http_proxy: ""
+        https_proxy: ""
+    steps:
+      - uses: Sanofi-InnerSource/github-actions-library/setup-root-ca@main
+      - name: add repo to safe directory
+        run: |
+          git config --global --add safe.directory /__w/${REPONAME}/${REPONAME}
+      - name: Checkout
+        uses: actions/checkout@v2.3.4
+        with:
+          fetch-depth: 0
+          submodules: 'true'
+          ref: ${{ github.BRANCH_NAME }}
+          token: ${{ env.GITHUB_PAT }}
+          
+      - name: Set Empty Git Proxy
+        run: |
+          git config --global http.proxy ""
+          git config --global https.proxy ""     
+          
+      - name: create branches and add workflow files, Codeowners file
+        run: |
+           cd ${WORKSPACE}/cicd-scripts
+           python3.9 add-workflows.py "Sanofi-GitHub" "${GITHUB_PAT}" "${WORKSPACE}/chc_tibco_tci_repos.csv" "${WORKSPACE}" "${GIT_EMAIL}" "${GIT_USERNAME}"
+
+ #     - name: create branch protection rules
+ #       run: |
+ #          cd ${WORKSPACE}/cicd-scripts
+ #          python3.9 add_protection_rules.py "Sanofi-GitHub" "${GITHUB_PAT}" "${WORKSPACE}/chc_tibco_tci_repos.csv"
+
+ #     - name: Access to teams group
+ #       run:
+ #        # bash ${GITHUB_WORKSPACE}/cicd-scripts/Assigning_admingroup.sh -d -u $GIT_USERNAME -t $GITHUB_PAT $ORGANIZATION Assingingteams.csv ${{ github.event.inputs.Access_level }}
+ #         bash ${GITHUB_WORKSPACE}/cicd-scripts/Assigning_readgroup.sh -d -u $GIT_USERNAME -t $GITHUB_PAT $ORGANIZATION Assingingteams.csv ${{ github.event.inputs.Access_level }}
+ #        # bash ${GITHUB_WORKSPACE}/cicd-scripts/Assigning_writegroup.sh -d -u $GIT_USERNAME -t $GITHUB_PAT $ORGANIZATION Assingingteams.csv ${{ github.event.inputs.Access_level }}
+ #       env:
+ #         GITHUB_PAT: ${{ secrets.CHC_GITHUB_PAT }}
+
+
+
