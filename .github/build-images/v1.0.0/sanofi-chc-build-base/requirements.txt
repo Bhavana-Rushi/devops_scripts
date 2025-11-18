@@ -1,0 +1,4 @@
+pynacl
+requests
+pyyaml
+ruamel.yaml
