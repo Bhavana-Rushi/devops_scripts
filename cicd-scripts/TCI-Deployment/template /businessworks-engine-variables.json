@@ -1,0 +1,32 @@
+
+[
+    {
+      "name": "BW_APP_CPU_ALERT_THRESHOLD",
+      "value": "${APP_ENG_BWCE_APP_CPU_ALERT_THRESHOLD}"
+    },
+    {
+      "name": "BW_APP_MEM_ALERT_THRESHOLD",
+      "value": "${APP_ENG_BWCE_APP_MEM_ALERT_THRESHOLD}"
+    },
+    {
+      "name": "BW_ENGINE_STEPCOUNT",
+      "value": "${APP_ENG_BWCE_ENGINE_STEPCOUNT}"
+    },
+    {
+      "name": "BW_ENGINE_THREADCOUNT",
+      "value": "${APP_ENG_BWCE_ENGINE_THREADCOUNT}"
+    },
+    {
+      "name": "BW_INSTRUMENTATION_ENABLED",
+      "value": "${APP_ENG_BWCE_INSTRUMENTATION_ENABLED}"
+    },
+    {
+      "name": "BW_LOGGER_OVERRIDES",
+      "value": "${APP_ENG_BWCE_LOGGER_OVERRIDES}"
+    },
+    {
+      "name": "CUSTOM_ENGINE_PROPERTY",
+      "value": "${APP_ENG_BWCE_CUSTOM_ENGINE_PROPERTY}"
+    }
+  ]
+  
