@@ -1,0 +1,74 @@
+name: Jfrog-test
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/Jfrog-test.yml"
+env:
+ HTTP_PROXY: ${{ secrets.CHC_HTTP_PROXY }}
+ HTTPS_PROXY: ${{ secrets.CHC_HTTPS_PROXY }}
+ GITHUB_PAT: ${{ secrets.CHC_GITHUB_PAT }}
+ JFROG_USERNAME:  ${{ secrets.JFROG_USERNAME }}
+ JFROG_TOKEN: ${{ secrets.JFROG_TOKEN }}
+ DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
+ DOCKER_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
+ CIC_TCI_CLIENTID_CICD: ${{ secrets.DEV_TCI_CLIENT_ID }}
+ CIC_TCI_CLIENTSECRET_CICD: ${{ secrets.DEV_TCI_CLIENT_SECRET }}
+ BUILD_ID: ${{ github.run_number }}
+ WORKSPACE: ${{ github.workspace }}
+ BRANCH_NAME: ${{github.event.inputs.branch_name}}
+ REPONAME: ${{ github.event.repository.name }}
+ INTERFACE_NAME: ${{ inputs.INTERFACE_NAME }}
+ APP_CONF_INSTANCECOUNT: ${{ github.event.inputs.instance_count }}
+# VENDOR_NAME: ${{github.event.inputs.vendor_name}}
+ NO_PROXY: 'cloud.local,sanofi.com,docker'
+ 
+jobs:
+  Build-Deployment:
+    runs-on: ['atmos-aws-arc-runner-set']
+    container:
+      image: docker-chc-tibco-remote.artifactorydev.p230559371484.aws-emea.sanofi.com/build-images/sanofi-chc-build-base:v1.0.0
+      credentials:
+        username: ${{ env.JFROG_USERNAME }}
+        password: ${{ env.DOCKER_TOKEN}}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: add repo to safe directory
+        run: |
+          git config --global --add safe.directory /__w/${REPONAME}/${REPONAME}
+      - name: CHeckout Devops scripts
+        uses: actions/checkout@v2.3.4
+        with:
+          repository: Sanofi-GitHub/chc-devops-scripts
+          ref: main
+          path: chc_scripts
+          token: ${{ env.GITHUB_PAT }}
+      - name: Curl command
+        run: |
+          curl -v -H "X-JFrog-Art-Api:${{ secrets.JFROG_TOKEN }}" https://sanofi.jfrog.io/artifactory/maven-chc-maven-local/com/tibco/plugins/com.tibco.bw.palette.shared/6.2.1900/com.tibco.bw.palette.shared-6.2.1900.jar
+      - name: Download JAR file
+        run: |
+          curl -o com.tibco.bw.palette.shared-6.2.1900.jar -H "X-JFrog-Art-Api:${{ secrets.JFROG_TOKEN }}" \
+            https://sanofi.jfrog.io/artifactory/maven-chc-maven-local/com/tibco/plugins/com.tibco.bw.palette.shared/6.2.1900/com.tibco.bw.palette.shared-6.2.1900.jar
+      - name: Verify downloaded file
+        run: |
+          file com.tibco.bw.palette.shared-6.2.1900.jar
+
+      - name: Extract JAR file
+        run: |
+          if file com.tibco.bw.palette.shared-6.2.1900.jar | grep -q 'Zip archive data'; then
+            mkdir jar-contents
+            unzip com.tibco.bw.palette.shared-6.2.1900.jar -d jar-contents
+          else
+            echo "The downloaded file is not a valid JAR (ZIP) file."
+          fi
+      - name: List contents of the JAR file
+        run: |
+          if [ -d jar-contents ]; then
+            ls -R jar-contents
+          else
+            echo "No contents to list, extraction failed or the file is not a valid JAR."
+          fi   
