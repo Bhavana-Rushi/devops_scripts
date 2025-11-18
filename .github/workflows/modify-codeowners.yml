@@ -1,0 +1,54 @@
+
+name: Modify Codeowners
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch_name: 
+        description: 'name of the branch'
+        required: true
+  # push:
+  #   branches:
+  #     - codeowners
+    
+env:      
+  #HTTP_PROXY: ${{ secrets.CHC_HTTP_PROXY }}
+  #HTTPS_PROXY: ${{ secrets.CHC_HTTPS_PROXY }}
+  GITHUB_PAT: ${{ secrets.CHC_GITHUB_PAT }}
+  JFROG_USERNAME:  ${{ secrets.JFROG_USERNAME }}
+  JFROG_TOKEN: ${{ secrets.JFROG_TOKEN }}
+  DOCKER_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
+  WORKSPACE: ${{ github.workspace }}
+  GIT_USERNAME:  ${{ secrets.CHC_GIT_CONFIG_NAME }}
+  GIT_EMAIL: ${{ secrets.CHC_GIT_CONFIG_EMAIL }}
+  BRANCH_NAME: ${{github.event.inputs.branch_name}}
+  REPONAME: ${{ github.event.repository.name }}
+
+jobs:
+  Modify-Codeowners:
+    runs-on: ['atmos-aws-arc-runner-set']
+    container:
+      image: sanofi-docker-chc-tibco-local.jfrog.io/build-images/sanofi-chc-build-base:v1.0.0
+      credentials:
+        username: ${{ env.JFROG_USERNAME }}
+        password: ${{ env.JFROG_TOKEN }}
+      env:
+        http_proxy: ""
+        https_proxy: ""
+    steps:
+      - uses: Sanofi-InnerSource/github-actions-library/setup-root-ca@main
+      - name: add repo to safe directory
+        run: |
+          git config --global --add safe.directory /__w/${REPONAME}/${REPONAME}
+      - name: Checkout
+        uses: actions/checkout@v2.3.4
+        with:
+          fetch-depth: 0
+          submodules: 'true'
+          ref: ${{ env.BRANCH_NAME }}
+          token: ${{ env.GITHUB_PAT }}
+
+      - name: Add/Update codeowners file in repo
+        run: |
+          cd ${WORKSPACE}/cicd-scripts
+          python3.9 modify-code-owners.py "Sanofi-GitHub" "${GITHUB_PAT}" "${WORKSPACE}/chc_tibco_tci_repos.csv" "${WORKSPACE}" "${WORKSPACE}/code-owners/CODEOWNERS" "${GIT_EMAIL}" "${GIT_USERNAME}" 
