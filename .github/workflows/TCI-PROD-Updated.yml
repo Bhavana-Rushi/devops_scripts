@@ -1,0 +1,368 @@
+
+name: TCI PROD Update
+
+on:
+  workflow_call:
+    secrets:
+      CHC_HTTP_PROXY:
+        required: true
+      CHC_HTTPS_PROXY:
+        required: true
+      CHC_GITHUB_PAT:
+        required: true
+      JFROG_USERNAME:
+        required: true
+      JFROG_TOKEN:
+        required: true
+      DOCKER_TOKEN:
+        required: true
+      DOCKER_REGISTRY:
+        required: true
+      PROD_TCI_CLIENT_ID:
+        required: true
+      PROD_TCI_CLIENT_SECRET:
+        required: true
+    inputs:
+      DOCKER_IMAGE:
+        required: true
+        type: string
+      INTERFACE_NAME:
+        required: true
+        type: string
+
+env:
+  #HTTP_PROXY: ${{ secrets.CHC_HTTP_PROXY }}
+  #HTTPS_PROXY: ${{ secrets.CHC_HTTPS_PROXY }}
+  GITHUB_PAT: ${{ secrets.CHC_GITHUB_PAT }}
+  JFROG_USERNAME:  ${{ secrets.JFROG_USERNAME }}
+  JFROG_TOKEN: ${{ secrets.JFROG_TOKEN }}
+  DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
+  DOCKER_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
+  CIC_TCI_CLIENTID_CICD: ${{ secrets.PROD_TCI_CLIENT_ID }}
+  CIC_TCI_CLIENTSECRET_CICD: ${{ secrets.PROD_TCI_CLIENT_SECRET }}
+  WORKSPACE: ${{ github.workspace }}
+  BUILD_ID: ${{ github.run_number }}
+  #BRANCH_NAME: ${{github.event.inputs.branch_name}}
+  #ARTIFACT_ENV: ${{github.event.inputs.artifact_env}}
+  BUILD_NUMBER: ${{github.event.inputs.build_number}}
+  APP_CONF_INSTANCECOUNT: ${{ github.event.inputs.instance_count }}
+  VENDOR_NAME: ${{ github.event.inputs.vendor_name }}
+  INSTANCE_NAME: ${{ github.event.inputs.instance_name }}
+  Sharedmodule_instance_name: ${{ github.event.inputs.Sharedmodule_instance_name }}
+  REPONAME: ${{ github.event.repository.name }}
+  INTERFACE_NAME: ${{ inputs.INTERFACE_NAME }}
+  NO_PROXY: 'cloud.local,sanofi.com,docker'
+
+jobs:
+  Deployment:
+    if: ${{ github.event.inputs.Deployment_type == 'Prod-Deployment' }} 
+    environment: prod
+    runs-on: ['atmos-aws-arc-runner-set']
+    container:
+      image: ${{ inputs.DOCKER_IMAGE }}
+      credentials:
+        username: ${{ env.JFROG_USERNAME }}
+        password: ${{ env.DOCKER_TOKEN}}
+      env:
+        http_proxy: ""
+        https_proxy: ""
+        NODE_EXTRA_CA_CERTS: /usr/local/share/ca-certificates/sanofi-ca.crt
+        REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+        CURL_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+        SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: Sanofi-InnerSource/github-actions-library/setup-root-ca@main
+      - name: Create unique workspace
+        run: |
+          export UNIQUE_WORKSPACE=${WORKSPACE}/${{ github.run_id }}_${{ github.job }}
+          mkdir -p $UNIQUE_WORKSPACE
+          echo "UNIQUE_WORKSPACE=$UNIQUE_WORKSPACE" >> $GITHUB_ENV
+      - name: Set up CA Certificates
+        run: |
+          # Copy the CA certificate to the container
+          #mkdir -p /usr/local/share/ca-certificates
+          #echo "${{ secrets.SANOFI_CA_CERT }}" > /usr/local/share/ca-certificates/sanofi-ca.crt
+          # Import the CA certificate into the Java truststore
+          keytool -importcert -file /usr/local/share/ca-certificates/sanofi-ca.crt -alias sanofi-ca -keystore /usr/lib/jvm/adoptopenjdk-11-hotspot-amd64/lib/security/cacerts -storepass changeit -noprompt
+      - name: add repo to safe directory
+        run: |
+          git config --global --add safe.directory /__w/${REPONAME}/${REPONAME}
+      - name: Checkout
+        uses: actions/checkout@v2.3.4
+        with:
+          fetch-depth: 0
+          submodules: 'true'
+          ref: development
+          token: ${{ env.GITHUB_PAT }}
+          path: ${{ env.UNIQUE_WORKSPACE }}
+
+      - name: Checkout Devops scripts
+        uses: actions/checkout@v2.3.4
+        with:
+          repository: Sanofi-GitHub/chc-devops-scripts
+          ref: main
+          path: ${{ env.UNIQUE_WORKSPACE }}/chc_scripts
+          token: ${{ env.GITHUB_PAT }}
+
+      - name: Checkout sharedmodule properties
+        #if: github.event.inputs.vendor_name == 'Cognizant'    
+        uses: actions/checkout@v2.3.4
+        with:
+          repository: Sanofi-GitHub/TCI-sharedmodule-config
+          ref: main
+          path: ${{ env.UNIQUE_WORKSPACE }}/shared_module
+          token: ${{ env.GITHUB_PAT }}
+
+      #- name: Checkout sharedmodule properties for Accenture
+      #  if: github.event.inputs.vendor_name == 'Accenture'    
+      #  uses: actions/checkout@v2.3.4
+      #  with:
+       #   repository: Sanofi-GitHub/TCI-accenture-sharedmodule-config
+      #    ref: main
+      #    path: shared_module
+      #    token: ${{ env.GITHUB_PAT }}
+      
+      #- name: Checkout sharedmodule properties for Infosys
+      #  if: github.event.inputs.vendor_name == 'Infosys'    
+      #  uses: actions/checkout@v2.3.4
+      #  with:
+      #    repository: Sanofi-GitHub/TCI-Infosys-sharedmodule-config
+      #    ref: main
+      #    path: shared_module
+      #    token: ${{ env.GITHUB_PAT }}
+     # - name: Change number
+     #   run: |
+     #     echo "This is Production deployment for ${{ github.event.inputs.Change_number }}"
+      - name: Download the build artifact
+        run: |
+          cd ${{ env.UNIQUE_WORKSPACE }}
+          curl -H "X-JFrog-Art-Api:${{ env.JFROG_TOKEN }}" -O "https://sanofi.jfrog.io/artifactory/maven-chc-maven-local/${INTERFACE_NAME}/UAT/UAT-${BUILD_NUMBER}/${INTERFACE_NAME}.application_1.0.0.ear"
+
+      - name: create updated property file
+        run: |
+          cd ${{ env.UNIQUE_WORKSPACE }}
+          if [ -z "${INSTANCE_NAME}" ]; then
+            application_filename="${{ env.UNIQUE_WORKSPACE }}/config/PROD/prod.properties"
+          else
+            application_filename="${{ env.UNIQUE_WORKSPACE }}/config/PROD/${INSTANCE_NAME}/prod.properties"
+          fi
+          if [ -z "${Sharedmodule_instance_name}" ]; then
+            sharedmodule_filename="${{ env.UNIQUE_WORKSPACE }}/shared_module/config/PROD/sharedmodule.properties"
+          else
+            sharedmodule_filename="${{ env.UNIQUE_WORKSPACE }}/shared_module/config/PROD/${Sharedmodule_instance_name}/sharedmodule.properties"
+          fi
+           bash ${{ env.UNIQUE_WORKSPACE }}/chc_scripts/cicd-scripts/TCI-Deployment/update_properties.sh -application_file=$application_filename -sharedmodule_file=$sharedmodule_filename
+          cd ${{ env.UNIQUE_WORKSPACE }}/config/PROD
+          if [ -z "${INSTANCE_NAME}" ]; then
+            mv manifest_prod.json manifest.json
+          else
+           mv ${INSTANCE_NAME}/manifest_prod.json manifest.json
+          fi 
+
+      - name: Upload artifact to jfrog
+        run: |
+          cd ${{ env.UNIQUE_WORKSPACE }}
+          if [ -z "${INSTANCE_NAME}" ]; then
+            curl -H "X-JFrog-Art-Api:${{ env.JFROG_TOKEN }}" -T ${INTERFACE_NAME}.application_1.0.0.ear "https://sanofi.jfrog.io/artifactory/maven-chc-maven-local/${INTERFACE_NAME}/PROD/PROD-${BUILD_ID}/"
+            curl -H "X-JFrog-Art-Api:${{ env.JFROG_TOKEN }}" -T ${{ env.UNIQUE_WORKSPACE }}/config/PROD/prod.properties "https://sanofi.jfrog.io/artifactory/maven-chc-maven-local/${INTERFACE_NAME}/PROD/PROD-${BUILD_ID}/"
+          else
+            curl -H "X-JFrog-Art-Api:${{ env.JFROG_TOKEN }}" -T ${INTERFACE_NAME}.application_1.0.0.ear "https://sanofi.jfrog.io/artifactory/maven-chc-maven-local/${INTERFACE_NAME}/PROD/PROD-${BUILD_ID}/"
+            curl -H "X-JFrog-Art-Api:${{ env.JFROG_TOKEN }}" -T ${{ env.UNIQUE_WORKSPACE }}/config/PROD/${INSTANCE_NAME}/prod.properties "https://sanofi.jfrog.io/artifactory/maven-chc-maven-local/${INTERFACE_NAME}/PROD/PROD-${BUILD_ID}/"
+          fi
+#      - name: Stopping application
+#        run: |
+#          sudo su
+#          cd ${{ env.UNIQUE_WORKSPACE }}/chc_scripts/cicd-scripts/
+#          chmod -R 777 *
+#          response="$(
+#            curl -sS -w "\n%{http_code}" \
+#            "https://eu.account.cloud.tibco.com/idm/v1/oauth2/token" \
+#            --header "Content-Type: application/x-www-form-urlencoded" \
+#            --data "grant_type=client_credentials&scope=TCI&client_id=${{ secrets.PROD_TCI_CLIENT_ID }}&client_secret=${{ secrets.PROD_TCI_CLIENT_SECRET }}"
+#            )"
+#          json_response=$(echo $response | sed 's/ [0-9]\+$//')
+#          PROD_TCI_TOKEN=$(echo $json_response | jq -r '.access_token')
+#          export PROD_TCI_TOKEN=$PROD_TCI_TOKEN
+#          sudo su
+#          cd ${{ env.UNIQUE_WORKSPACE }}/chc_scripts/cicd-scripts/
+#          ./tibcli authorize --token $PROD_TCI_TOKEN
+#          if [ -z "${INSTANCE_NAME}" ]; then
+#            ./tibcli app scaleto 0 ${INTERFACE_NAME}
+#          else
+#            ./tibcli app scaleto 0 ${INTERFACE_NAME}_${INSTANCE_NAME}
+#          fi
+      - name: TCI-Deployment
+        run: |
+          cd $WORKSPACE
+          if [ -z "${INSTANCE_NAME}" ]; then
+            config_file="${{ env.UNIQUE_WORKSPACE }}/config/PROD/config_prod.json"
+          else
+            config_file="${{ env.UNIQUE_WORKSPACE }}/config/PROD/${INSTANCE_NAME}/config_prod.json"
+          fi
+          APP_AGENT_KEY=$(jq -r '.hybrid_agent_key' "$config_file")
+          export APP_AGENT_KEY=$APP_AGENT_KEY
+          echo "hybrid agent key is ${APP_AGENT_KEY}"
+          export DEPLOYMENT_SCRIPT=${{ env.UNIQUE_WORKSPACE }}/chc_scripts/cicd-scripts/TCI-Deployment/bin/tci
+          if [ -z "${INSTANCE_NAME}" ]; then
+            bash ${DEPLOYMENT_SCRIPT}/chc-render-application-properties.sh ${{ env.UNIQUE_WORKSPACE }}/config/PROD/prod.properties /tmp/prod.json
+            bash ${DEPLOYMENT_SCRIPT}/chc-app-manage.sh deploy ${INTERFACE_NAME} /tmp/prod.json ${{ env.UNIQUE_WORKSPACE }}/${INTERFACE_NAME}.application_1.0.0.ear ${{ env.UNIQUE_WORKSPACE }}/config/PROD/manifest.json       
+          else
+            bash ${DEPLOYMENT_SCRIPT}/chc-render-application-properties.sh ${{ env.UNIQUE_WORKSPACE }}/config/PROD/${INSTANCE_NAME}/prod.properties /tmp/prod.json
+            bash ${DEPLOYMENT_SCRIPT}/chc-app-manage.sh deploy ${INTERFACE_NAME}_${INSTANCE_NAME} /tmp/prod.json ${{ env.UNIQUE_WORKSPACE }}/${INTERFACE_NAME}.application_1.0.0.ear ${{ env.UNIQUE_WORKSPACE }}/config/PROD/manifest.json       
+          fi
+  rollback:
+    if: ${{ github.event.inputs.Deployment_type == 'Rollback' }} 
+    #environment: prod
+    runs-on: ['atmos-aws-arc-runner-set']
+    container:
+      image: ${{ inputs.DOCKER_IMAGE }}
+      credentials:
+        username: ${{ env.JFROG_USERNAME }}
+        password: ${{ env.DOCKER_TOKEN}}
+      env:
+        http_proxy: ""
+        https_proxy: ""
+        NODE_EXTRA_CA_CERTS: /usr/local/share/ca-certificates/sanofi-ca.crt
+        REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+        CURL_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+        SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: Sanofi-InnerSource/github-actions-library/setup-root-ca@main
+      - name: Set up CA Certificates
+        run: |
+          # Copy the CA certificate to the container
+          #mkdir -p /usr/local/share/ca-certificates
+          #echo "${{ secrets.SANOFI_CA_CERT }}" > /usr/local/share/ca-certificates/sanofi-ca.crt
+          # Import the CA certificate into the Java truststore
+          keytool -importcert -file /usr/local/share/ca-certificates/sanofi-ca.crt -alias sanofi-ca -keystore /usr/lib/jvm/adoptopenjdk-11-hotspot-amd64/lib/security/cacerts -storepass changeit -noprompt
+      - name: add repo to safe directory
+        run: |
+          git config --global --add safe.directory /__w/${REPONAME}/${REPONAME}
+      - name: Checkout
+        uses: actions/checkout@v2.3.4
+        with:
+          fetch-depth: 0
+          submodules: 'true'
+          ref: development
+          token: ${{ env.GITHUB_PAT }}
+
+      - name: Checkout Devops scripts
+        uses: actions/checkout@v2.3.4
+        with:
+          repository: Sanofi-GitHub/chc-devops-scripts
+          ref: main
+          path: chc_scripts
+          token: ${{ env.GITHUB_PAT }}
+
+      - name: Checkout sharedmodule properties
+        #if: github.event.inputs.vendor_name == 'Cognizant'    
+        uses: actions/checkout@v2.3.4
+        with:
+          repository: Sanofi-GitHub/TCI-sharedmodule-config
+          ref: main
+          path: shared_module
+          token: ${{ env.GITHUB_PAT }}
+
+      #- name: Checkout sharedmodule properties for Accenture
+      #  if: github.event.inputs.vendor_name == 'Accenture'    
+      #  uses: actions/checkout@v2.3.4
+      #  with:
+       #   repository: Sanofi-GitHub/TCI-accenture-sharedmodule-config
+      #    ref: main
+      #    path: shared_module
+      #    token: ${{ env.GITHUB_PAT }}
+      
+      #- name: Checkout sharedmodule properties for Infosys
+      #  if: github.event.inputs.vendor_name == 'Infosys'    
+      #  uses: actions/checkout@v2.3.4
+      #  with:
+      #    repository: Sanofi-GitHub/TCI-Infosys-sharedmodule-config
+      #    ref: main
+      #    path: shared_module
+      #    token: ${{ env.GITHUB_PAT }}
+      - name: Change number
+        run: |
+          echo "This is Rollback for ${{ github.event.inputs.Change_number }}"
+      - name: Download the build artifact
+        run: |
+          cd ${{ env.UNIQUE_WORKSPACE }}
+          curl -H "X-JFrog-Art-Api:${{ env.JFROG_TOKEN }}" -O "https://sanofi.jfrog.io/artifactory/maven-chc-maven-local/${INTERFACE_NAME}/PROD/PROD-${BUILD_NUMBER}/${INTERFACE_NAME}.application_1.0.0.ear"
+
+      - name: create updated property file
+        run: |
+          cd ${{ env.UNIQUE_WORKSPACE }}
+          if [ -z "${INSTANCE_NAME}" ]; then
+            application_filename="${{ env.UNIQUE_WORKSPACE }}/config/PROD/prod.properties"
+          else
+            application_filename="${{ env.UNIQUE_WORKSPACE }}/config/PROD/${INSTANCE_NAME}/prod.properties"
+          fi
+          if [ -z "${Sharedmodule_instance_name}" ]; then
+            sharedmodule_filename="${{ env.UNIQUE_WORKSPACE }}/shared_module/config/PROD/sharedmodule.properties"
+          else
+            sharedmodule_filename="${{ env.UNIQUE_WORKSPACE }}/shared_module/config/PROD/${Sharedmodule_instance_name}/sharedmodule.properties"
+          fi
+           bash ${{ env.UNIQUE_WORKSPACE }}/chc_scripts/cicd-scripts/TCI-Deployment/update_properties.sh -application_file=$application_filename -sharedmodule_file=$sharedmodule_filename
+          cd ${{ env.UNIQUE_WORKSPACE }}/config/PROD
+          if [ -z "${INSTANCE_NAME}" ]; then
+            mv manifest_prod.json manifest.json
+          else
+           mv ${INSTANCE_NAME}/manifest_prod.json manifest.json
+          fi 
+
+      - name: Upload artifact to jfrog
+        run: |
+          cd ${{ env.UNIQUE_WORKSPACE }}
+          if [ -z "${INSTANCE_NAME}" ]; then
+            curl -H "X-JFrog-Art-Api:${{ env.JFROG_TOKEN }}" -T ${INTERFACE_NAME}.application_1.0.0.ear "https://sanofi.jfrog.io/artifactory/maven-chc-maven-local/${INTERFACE_NAME}/PROD/PROD-${BUILD_ID}/"
+            curl -H "X-JFrog-Art-Api:${{ env.JFROG_TOKEN }}" -T ${{ env.UNIQUE_WORKSPACE }}/config/PROD/prod.properties "https://sanofi.jfrog.io/artifactory/maven-chc-maven-local/${INTERFACE_NAME}/PROD/PROD-${BUILD_ID}/"
+          else
+            curl -H "X-JFrog-Art-Api:${{ env.JFROG_TOKEN }}" -T ${INTERFACE_NAME}.application_1.0.0.ear "https://sanofi.jfrog.io/artifactory/maven-chc-maven-local/${INTERFACE_NAME}/PROD/PROD-${BUILD_ID}/"
+            curl -H "X-JFrog-Art-Api:${{ env.JFROG_TOKEN }}" -T ${{ env.UNIQUE_WORKSPACE }}/config/PROD/${INSTANCE_NAME}/prod.properties "https://sanofi.jfrog.io/artifactory/maven-chc-maven-local/${INTERFACE_NAME}/PROD/PROD-${BUILD_ID}/"
+          fi
+#      - name: Stopping application
+#        run: |
+#          sudo su
+#          cd ${{ env.UNIQUE_WORKSPACE }}/chc_scripts/cicd-scripts/
+#          chmod -R 777 *
+#          response="$(
+#            curl -sS -w "\n%{http_code}" \
+#            "https://eu.account.cloud.tibco.com/idm/v1/oauth2/token" \
+#            --header "Content-Type: application/x-www-form-urlencoded" \
+#            --data "grant_type=client_credentials&scope=TCI&client_id=${{ secrets.PROD_TCI_CLIENT_ID }}&client_secret=${{ secrets.PROD_TCI_CLIENT_SECRET }}"
+#            )"
+#          json_response=$(echo $response | sed 's/ [0-9]\+$//')
+#          PROD_TCI_TOKEN=$(echo $json_response | jq -r '.access_token')
+#          export PROD_TCI_TOKEN=$PROD_TCI_TOKEN
+#          sudo su
+#          cd ${{ env.UNIQUE_WORKSPACE }}/chc_scripts/cicd-scripts/
+#          ./tibcli authorize --token $PROD_TCI_TOKEN
+#          if [ -z "${INSTANCE_NAME}" ]; then
+#            ./tibcli app scaleto 0 ${INTERFACE_NAME}
+#          else
+#            ./tibcli app scaleto 0 ${INTERFACE_NAME}_${INSTANCE_NAME}
+#          fi
+      - name: TCI-Deployment
+        run: |
+          cd $WORKSPACE
+          if [ -z "${INSTANCE_NAME}" ]; then
+            config_file="${{ env.UNIQUE_WORKSPACE }}/config/PROD/config_prod.json"
+          else
+            config_file="${{ env.UNIQUE_WORKSPACE }}/config/PROD/${INSTANCE_NAME}/config_prod.json"
+          fi
+          APP_AGENT_KEY=$(jq -r '.hybrid_agent_key' "$config_file")
+          export APP_AGENT_KEY=$APP_AGENT_KEY
+          echo "hybrid agent key is ${APP_AGENT_KEY}"
+          export DEPLOYMENT_SCRIPT=${{ env.UNIQUE_WORKSPACE }}/chc_scripts/cicd-scripts/TCI-Deployment/bin/tci
+          if [ -z "${INSTANCE_NAME}" ]; then
+            bash ${DEPLOYMENT_SCRIPT}/chc-render-application-properties.sh ${{ env.UNIQUE_WORKSPACE }}/config/PROD/prod.properties /tmp/prod.json
+            bash ${DEPLOYMENT_SCRIPT}/chc-app-manage.sh deploy ${INTERFACE_NAME} /tmp/prod.json ${{ env.UNIQUE_WORKSPACE }}/${INTERFACE_NAME}.application_1.0.0.ear ${{ env.UNIQUE_WORKSPACE }}/config/PROD/manifest.json       
+          else
+            bash ${DEPLOYMENT_SCRIPT}/chc-render-application-properties.sh ${{ env.UNIQUE_WORKSPACE }}/config/PROD/${INSTANCE_NAME}/prod.properties /tmp/prod.json
+            bash ${DEPLOYMENT_SCRIPT}/chc-app-manage.sh deploy ${INTERFACE_NAME}_${INSTANCE_NAME} /tmp/prod.json ${{ env.UNIQUE_WORKSPACE }}/${INTERFACE_NAME}.application_1.0.0.ear ${{ env.UNIQUE_WORKSPACE }}/config/PROD/manifest.json       
+          fi
