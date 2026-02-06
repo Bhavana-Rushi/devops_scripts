@@ -5,4 +5,4 @@
 # the repo. Unless a later match takes precedence,
 # they will be requested for
 # review when someone opens a pull request.
-*       @Sanofi-GitHub/chc-ams-support-codeowners @Sanofi-GitHub/chc-accenture-codeowners
+*       @Sanofi-GitHub/chc-ams-support-codeowners
